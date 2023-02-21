@@ -2,8 +2,6 @@
 Hi there, we are happy that you are here!✨ <br />
 In this document you'll find brief information about RISE drone system, after which we help you get started. In order to grow and get better we greatly appreciate your feedback, feel free to contribute by following the contribution guidelines. In the last section you can find information about licensing and how you can utilize our system.
 
-hej
-
 ## What is RISE drone system?
 The platform is built to simplify the process of developing applications for autonomous systems and to make it easy to get a sensor in the air or lay out search patterns.
 
