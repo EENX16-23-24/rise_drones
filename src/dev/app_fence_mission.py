@@ -52,7 +52,7 @@ class PhotoMission():
     self.drone = dss.client.Client(timeout=2000, exception_handler=None, context=_context)
 
     # Create CRM object
-    self.crm = dss.client.CRM(_context, crm, app_name='app_template_photo_mission.py', desc='Photo mission application', app_id=app_id)
+    self.crm = dss.client.CRM(_context, crm, app_name='app_fence_mission', desc='AstaZero fence surveillence mission', app_id=app_id)
 
     self._alive = True
     self._dss_data_thread = None
@@ -245,21 +245,8 @@ class PhotoMission():
   def main(self):
     # Dummy mission
 
-    mission = {}
+    mission = self.mission
 
-    with open("./coordinates.csv", 'r') as file:
-      csvreader = csv.reader(file)
-      
-      for index, (lat, lon, alt, heading, speed) in enumerate(csvreader):
-        mission['id'+str(index)] = {
-          "lat": lat,
-          "lon": lon,
-          "alt": alt,
-          "heading": heading,
-          "speed": speed,
-          "action": "take_photo",
-          "gimbal_pitch": -45
-        }
 
     # Get a drone
     answer = self.crm.get_drone(capabilities=['RGB'])
@@ -288,13 +275,22 @@ class PhotoMission():
     self.drone.await_controls()
     _logger.info("Application is in controls")
 
+
+    self.drone.set_geofence(0, 100, 1000)
+
+    time.sleep(2)
+
+    self.drone.try_set_init_point(heading_ref=0)
+
+    '''
+
     # set init point
-    self.drone.try_set_init_point('camera')
 
     # take photo
-    self.drone.photo_take_photo()
+    #self.drone.photo_take_photo()
 
     # download photo as soon as camera is ready
+
     while True:
       try:
         self.drone.photo_download(index = 'latest', resolution='high')
@@ -302,6 +298,7 @@ class PhotoMission():
         time.sleep(0.2)
       else:
         break
+
 
     # Look for picture to arrive
     _logger.info("Download initial photo")
@@ -312,12 +309,16 @@ class PhotoMission():
       time.sleep(1)
       seconds += 1
 
+
+    '''
+
     # Generate a mission (This template uses a dummy mission)
     _logger.info("Generate mission...")
     time.sleep(1)
 
     # Upload mission
     _logger.info("Upload mission")
+    print(mission)
     self.drone.upload_mission_LLA(mission=mission)
 
     # take-off
@@ -420,7 +421,28 @@ def _main():
   parser.add_argument('--log', type=str, default='debug', help='logging threshold')
   parser.add_argument('--owner', type=str, help='id of the instance controlling app_template - not used in this use case')
   parser.add_argument('--stdout', action='store_true', help='enables logging to stdout')
+  parser.add_argument('--coordfile', type=str, required=True, help='File to csv file with coordinates')
   args = parser.parse_args()
+
+  mission = {}
+
+  with open( args.coordfile, 'r') as file:
+    csvreader = csv.reader(file)
+
+    next(csvreader)
+    
+    for index, (lat, lon, alt, heading, speed) in enumerate(csvreader):
+      mission['id'+str(index)] = {
+        "lat": lat,
+        "lon": lon,
+        "alt": alt,
+        "heading": heading,
+        "speed": speed
+      }
+
+  print(json.dumps(mission, indent=2))
+
+
 
   # Identify subnet to sort log files in structure
   subnet = dss.auxiliaries.zmq.get_subnet(ip=args.app_ip)
@@ -436,6 +458,9 @@ def _main():
   except:
     _logger.error('Failed to instantiate application\n%s', traceback.format_exc())
     sys.exit()
+
+
+  app.mission = mission
 
   # Try to setup objects and initial sockets
   try:
