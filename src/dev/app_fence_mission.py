@@ -20,6 +20,8 @@ import zmq
 import dss.auxiliaries
 import dss.client
 
+from datetime import datetime
+
 #--------------------------------------------------------------------#
 
 __author__ = 'Lennart Ochel <lennart.ochel@ri.se>, Andreas Gising <andreas.gising@ri.se>, Kristoffer Bergman <kristoffer.bergman@ri.se>, Hanna Müller <hanna.muller@ri.se>, Joel Nordahl'
@@ -59,6 +61,22 @@ class PhotoMission():
     self._dss_data_thread_active = False
     self._dss_info_thread = None
     self._dss_info_thread_active = False
+
+
+    now = datetime.now()
+    dt_string = now.strftime("%Y-%m-%d %H:%M:%S")
+
+    csv_file = open('output_coordinates/coordinates_trip_%s.csv' % dt_string, 'w', newline='')
+    csv_writer = csv.writer(
+      csv_file,
+      delimiter=',',
+      quotechar='|',
+      quoting=csv.QUOTE_MINIMAL
+    )
+    
+    csv_writer.writerow(['a', 'c'])
+
+
 
     # counter for transferred photos
     self.transferred = 0
@@ -194,6 +212,9 @@ class PhotoMission():
     # self.drone._dss.data_stream('LLA', True)
     # Enable waypoint subscription
     self.drone.enable_data_stream('currentWP')
+    self.drone.enable_data_stream('LLA')
+    #self.drone.enable_data_stream('battery')
+
     # Create info socket and start listening thread
     info_socket = dss.auxiliaries.zmq.Sub(_context, ip, port, "info " + self.crm.app_id)
     while self._dss_info_thread_active:
@@ -276,13 +297,14 @@ class PhotoMission():
     _logger.info("Application is in controls")
 
 
-    self.drone.set_geofence(0, 100, 1000)
+    self.drone.set_geofence(0, 60, 100)
 
     time.sleep(2)
 
     self.drone.try_set_init_point(heading_ref=0)
 
-    '''
+
+
 
     # set init point
 
@@ -291,6 +313,8 @@ class PhotoMission():
 
     # download photo as soon as camera is ready
 
+    '''
+
     while True:
       try:
         self.drone.photo_download(index = 'latest', resolution='high')
@@ -298,6 +322,9 @@ class PhotoMission():
         time.sleep(0.2)
       else:
         break
+
+
+    
 
 
     # Look for picture to arrive
