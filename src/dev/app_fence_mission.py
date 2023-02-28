@@ -49,7 +49,7 @@ _context = zmq.Context()
 
 class PhotoMission():
   # Init
-  def __init__(self, app_ip, app_id, crm):
+  def __init__(self, app_ip, app_id, crm, input_coordinates_file):
     # Create Client object
     self.drone = dss.client.Client(timeout=2000, exception_handler=None, context=_context)
 
@@ -64,19 +64,42 @@ class PhotoMission():
 
 
     now = datetime.now()
-    dt_string = now.strftime("%Y-%m-%d %H:%M:%S")
+    dt_string = now.strftime("%Y-%m-%d %H_%M_%S")
 
-    csv_file = open('output_coordinates/coordinates_trip_%s.csv' % dt_string, 'w', newline='')
-    csv_writer = csv.writer(
-      csv_file,
-      delimiter=',',
-      quotechar='|',
-      quoting=csv.QUOTE_MINIMAL
+    BASENAME = 'output_coordinates/coordinates_trip_{0}'.format(dt_string)
+    self.csv_file = open(BASENAME+'.csv', 'w')
+    self.csv_writer = csv.writer(
+      self.csv_file,
+      delimiter=','
     )
-    
-    csv_writer.writerow(['a', 'c'])
 
+    metadata_object = {
+      "input_coordinates_file": input_coordinates_file
+    }
 
+    with open(BASENAME+'.json','w+') as f:
+      f.write(json.dumps(metadata_object))
+
+    self.mission = []
+
+    with open( input_coordinates_file, 'r') as file:
+      csvreader = csv.reader(file)
+
+      next(csvreader)
+      
+      for index, (lat, lon, alt, heading, speed) in enumerate(csvreader):
+        self.mission['id'+str(index)] = {
+          "lat": lat,
+          "lon": lon,
+          "alt": alt,
+          "heading": heading,
+          "speed": speed
+        }
+
+    print(json.dumps(self.mission, indent=2))
+
+    self.csv_writer.writerow(['timestamp', 'unix', 'lat', 'lon', 'height'])
+    self.csv_file.flush()
 
     # counter for transferred photos
     self.transferred = 0
@@ -221,6 +244,19 @@ class PhotoMission():
       try:
         (topic, msg) = info_socket.recv()
         if topic == 'LLA':
+
+          now = datetime.now()
+          dt_string = now.strftime("%Y-%m-%d %H:%M:%S")
+
+          self.csv_writer.writerow([
+            dt_string, 
+            int(time.time()*1000),  
+            msg['lat'], 
+            msg['lon'], 
+            msg['alt']
+          ])
+          self.csv_file.flush()
+
           _logger.info(msg)
         elif topic == 'battery':
           _logger.info('Remaning battery time: '+ msg['remaining_time'] +  ' seconds')
@@ -297,13 +333,17 @@ class PhotoMission():
     _logger.info("Application is in controls")
 
 
-    self.drone.set_geofence(0, 60, 100)
+    self.drone.try_set_init_point(heading_ref=0)
 
-    time.sleep(2)
+    self.drone.set_geofence(0, 120, 100)
+
 
     self.drone.try_set_init_point(heading_ref=0)
 
+#    self.drone.set_init_point(heading_ref=0)
 
+
+    time.sleep(2)
 
 
     # set init point
@@ -451,25 +491,6 @@ def _main():
   parser.add_argument('--coordfile', type=str, required=True, help='File to csv file with coordinates')
   args = parser.parse_args()
 
-  mission = {}
-
-  with open( args.coordfile, 'r') as file:
-    csvreader = csv.reader(file)
-
-    next(csvreader)
-    
-    for index, (lat, lon, alt, heading, speed) in enumerate(csvreader):
-      mission['id'+str(index)] = {
-        "lat": lat,
-        "lon": lon,
-        "alt": alt,
-        "heading": heading,
-        "speed": speed
-      }
-
-  print(json.dumps(mission, indent=2))
-
-
 
   # Identify subnet to sort log files in structure
   subnet = dss.auxiliaries.zmq.get_subnet(ip=args.app_ip)
@@ -478,16 +499,13 @@ def _main():
 
   # Create the PhotoMission class
   try:
-    app = PhotoMission(args.app_ip, args.id, args.crm)
+    app = PhotoMission(args.app_ip, args.id, args.crm, args.coordfile)
   except dss.auxiliaries.exception.NoAnswer:
     _logger.error('Failed to instantiate application: Probably the CRM couldn\'t be reached')
     sys.exit()
   except:
     _logger.error('Failed to instantiate application\n%s', traceback.format_exc())
     sys.exit()
-
-
-  app.mission = mission
 
   # Try to setup objects and initial sockets
   try:
